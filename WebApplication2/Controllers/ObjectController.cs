@@ -1,7 +1,5 @@
 using Amazon.S3;
-using Amazon.S3.Model;
 using Microsoft.AspNetCore.Mvc;
-using WebApplication2.Configuration;
 using WebApplication2.Models;
 using WebApplication2.Soap.Object;
 
@@ -58,20 +56,12 @@ public class ObjectController : ControllerBase
     }
 
 
-    [HttpGet("{fileKey}")] // Download an object
+    [HttpGet("{fileKey}")]
     public async Task<IActionResult> DownloadObject(string bucketName, string fileKey)
     {
-        var s3Client = S3Configuration.GetS3Client();
+        var filePath = Path.Combine("Uploads", bucketName, fileKey);
 
-        try
-        {
-            var response = await s3Client.GetObjectAsync(bucketName, fileKey);
-            return File(response.ResponseStream, response.Headers.ContentType, fileKey);
-        }
-        catch (AmazonS3Exception e)
-        {
-            return StatusCode(500, new { error = e.Message });
-        }
+        return null;
     }
 
     [HttpDelete("{fileKey}")] // Delete an object
@@ -79,7 +69,9 @@ public class ObjectController : ControllerBase
     {
         try
         {
-            var a = App.ObjectsResponse.Contents;
+            var filePath = Path.Combine("Uploads", bucketName, fileKey);
+            System.IO.File.Delete(filePath);
+            RemoveFromS3(fileKey);
             return Ok();
         }
         catch (AmazonS3Exception e)
@@ -91,12 +83,15 @@ public class ObjectController : ControllerBase
     private async Task<IActionResult> UploadSmallObject(string bucketName, string fileKey)
     {
         byte[] binaryData = [];
+        Directory.CreateDirectory(Path.Combine("Uploads", bucketName));
+        var filePath = Path.Combine("Uploads", bucketName, fileKey);
         using (var memoryStream = new MemoryStream())
         {
             await Request.Body.CopyToAsync(memoryStream);
             binaryData = memoryStream.ToArray();
         }
 
+        await System.IO.File.WriteAllBytesAsync(filePath, binaryData); // Requires System.IO
         AddToS3(bucketName, fileKey, binaryData.Length);
         return Ok();
     }
@@ -111,6 +106,11 @@ public class ObjectController : ControllerBase
         };
         App.ObjectsResponse.Contents.Add(newObject);
         App.ObjectsResponse.Name = bucketName;
+    }
+
+    private static void RemoveFromS3(string fileKey)
+    {
+        App.ObjectsResponse.Contents.RemoveAll(objectsResponseContent => objectsResponseContent.Key.Equals(fileKey));
     }
 
     private async Task<IActionResult> UploadLargeObject(string? uploadId, int? partNumber)
@@ -140,7 +140,8 @@ public class ObjectController : ControllerBase
 
     private async Task<IActionResult> CompleteMultipartUpload(string bucketName, string fileKey, string? uploadId)
     {
-        var finalFilePath = Path.Combine("Uploads", fileKey);
+        Directory.CreateDirectory(Path.Combine("Uploads", bucketName));
+        var finalFilePath = Path.Combine("Uploads", bucketName, fileKey);
         await using (var finalFile = new FileStream(finalFilePath, FileMode.Create))
         {
             var partNumber = 1;

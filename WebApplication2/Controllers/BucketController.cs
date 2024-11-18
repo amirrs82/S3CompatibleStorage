@@ -1,7 +1,5 @@
-using System.Net;
 using Amazon.S3;
 using Microsoft.AspNetCore.Mvc;
-using WebApplication2.Configuration;
 using WebApplication2.Models;
 using WebApplication2.Soap.Bucket;
 
@@ -38,17 +36,7 @@ public class BucketController : ControllerBase
     [HttpDelete("{bucketName}")]
     public async Task<IActionResult> DeleteBucket(string bucketName)
     {
-        var s3Client = S3Configuration.GetS3Client();
-
-        try
-        {
-            await s3Client.DeleteBucketAsync(bucketName);
-            return Ok(new { message = $"Bucket '{bucketName}' deleted successfully." });
-        }
-        catch (AmazonS3Exception e)
-        {
-            return StatusCode(500, new { error = e.Message });
-        }
+        return Ok();
     }
 
     [HttpGet]
