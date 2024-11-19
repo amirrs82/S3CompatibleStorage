@@ -21,6 +21,5 @@ public class ListObjectsResponse
     [XmlElement("Delimiter")] public string Delimiter { get; set; } = "/";
 
     [XmlElement("IsTruncated")] public bool IsTruncated { get; set; }
-
     [XmlElement("Contents")] public List<Content> Contents { get; set; } = [];
 }

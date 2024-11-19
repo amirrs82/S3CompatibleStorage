@@ -1,4 +1,5 @@
 using Amazon.S3;
+using Amazon.S3.Model;
 using Microsoft.AspNetCore.Mvc;
 using WebApplication2.Models;
 using WebApplication2.Soap.Object;
@@ -56,12 +57,34 @@ public class ObjectController : ControllerBase
     }
 
 
+    [HttpHead("{fileKey}")]
+    public async Task<IActionResult> GetObjectMetaData(string bucketName, string fileKey)
+    {
+        var a = App.ObjectsResponse.Contents.FindAll(objectsResponseContent =>
+            objectsResponseContent.Key.Equals(fileKey)).First();
+        Response.Headers.ETag = a.ETag;
+        Response.Headers.LastModified = a.LastModified.ToString();
+        Response.Headers.ContentLength = a.Size;
+        return Ok();
+    }
+
     [HttpGet("{fileKey}")]
     public async Task<IActionResult> DownloadObject(string bucketName, string fileKey)
     {
         var filePath = Path.Combine("Uploads", bucketName, fileKey);
+        var range = HttpContext.Request.Headers.Range.ToString();
+        var (start, end) = ParseRangeHeader(range);
 
-        return null;
+        await using var sourceStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+
+        var startByte = start ?? 0;
+        var endByte = end ?? sourceStream.Length;
+        var bytesToRead = endByte - startByte + 1;
+        var buffer = new byte[bytesToRead];
+
+        sourceStream.Seek(startByte, SeekOrigin.Begin);
+        sourceStream.Read(buffer, 0, (int)bytesToRead);
+        return File(buffer, "application/octet-stream", fileKey);
     }
 
     [HttpDelete("{fileKey}")] // Delete an object
@@ -173,5 +196,24 @@ public class ObjectController : ControllerBase
 
         AddToS3(bucketName, fileKey, new FileInfo(finalFilePath).Length);
         return Ok(result);
+    }
+
+    private static (long? startByte, long? endByte) ParseRangeHeader(string range)
+    {
+        if (string.IsNullOrEmpty(range))
+        {
+            return (null, null);
+        }
+
+        // Range format: "bytes=startByte-endByte"
+        if (!range.StartsWith("bytes=")) return (null, null);
+        var rangeValues = range[6..]; // Remove "bytes="
+        var rangeParts = rangeValues.Split('-'); // Split into start and end part
+        long? startByte = null, endByte = null;
+
+        startByte = string.IsNullOrEmpty(rangeParts[0]) ? null : long.Parse(rangeParts[0]);
+        endByte = string.IsNullOrEmpty(rangeParts[1]) ? null : long.Parse(rangeParts[1]);
+
+        return (startByte, endByte);
     }
 }
